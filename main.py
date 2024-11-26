@@ -18,7 +18,8 @@ BG_COLOR = (0,0,0)
 vid = VideoPlayer(Video("breaking_bad.mp4"), (0, 0, WIDTH, HEIGHT),)
 
 # Brightness factor
-brightness = 1.0
+# brightness = 1.0
+
 
 running = True
 
@@ -28,15 +29,18 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_UP:
-                brightness += 0.1 
-            if event.key == pygame.K_DOWN:
-                brightness = max(0.1, brightness - 0.1)         
+            # if event.key == pygame.K_UP:
+            #     brightness += 0.1 
+            # if event.key == pygame.K_DOWN:
+            #     brightness = max(0.1, brightness - 0.1)   
+            pass      
 
     
     pygame.time.wait(16)
 
     SCREEN.fill(BG_COLOR)
+
+    brightness = np.random.uniform(0, 4)
 
     # Draw the video frame onto a temporary surface
     temp_surface = pygame.Surface((WIDTH, HEIGHT))
