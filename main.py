@@ -31,7 +31,8 @@ beep_sound.set_volume(0.5)  # Standaard volume van de pieptoon
 video_volume = 1.0  # Beginvolume van de video
 brightness = 1.0
 target_brightness = 1.0
-adjust_speed = 0.01  # Hoe snel helderheid verandert
+combined = target_brightness
+adjust_speed = 0.2  # Hoe snel helderheid verandert
 
 running = True
 last_adjust_time = 0  # Tijd van de laatste helderheidsaanpassing
@@ -59,6 +60,11 @@ sample_17 = np.empty((0))
 sample_18 = np.empty((0))
 sample_19 = np.empty((0))
 
+min_9, max_9 = 2.74, 8.3
+min_17, max_17 = 0.67, 1.08
+min_18, max_18 = 0.75, 1.16
+min_19, max_19 = 0.98, 1.46
+
 
 try:
 
@@ -74,7 +80,7 @@ try:
         if len(sample)==0:
             continue
         sample=np.array(sample)
-        print(sample.shape)
+        # print(sample.shape)
 
         sample_9=np.append(sample_9, sample[:,8])
         sample_17=np.append(sample_17, sample[:,16])
@@ -85,60 +91,72 @@ try:
 
         # Nieuwe doelwaarden instellen op een interval van 2 seconden
         #if secondmarker>=2:
-        if len(sample_17)>=10*sf:
-            # print(f'Sample: {sample_17}\n {sample_17.shape}\n')
-            # fft = np.fft.fft(sample_17)
-            # fftfreq = np.fft.fftfreq(len(sample_17))
-            # f=plt.plot(abs(fft[0:int(len(fft)/2)]))
+        if len(sample_19)>=2*sf:
             # filter (band pass toevoegen), wss 1 tot 30, we willen 50 hz eruit hebben(lichtnet)
-            freqs, psd = signal.welch(sample_17, sf, nperseg=win)
-            idx_delta = np.logical_and(freqs>= low, freqs<= high)
-            plt.figure(figsize=(7,4))
-            plt.plot(freqs,psd)
-            plt.fill_between(freqs, psd, where=idx_delta, color='skyblue')
-            #plt.xlim([0,100])
-            plt.ylim([0,psd.max()*1.1])
-            g=plt.figure()
-            [print(samp) for samp in sample_17]
-            plt.plot(sample_17)
-            plt.show()
-            plt.show()
-            freq_res = freqs[1]-freqs[0]
-            delta_power = simpson(psd[idx_delta], dx=freq_res)
-            print(f'Delta power: {delta_power}')
+            freqs_9, psd_9 = signal.welch(sample_9, sf, nperseg=win)
+            freqs_17, psd_17 = signal.welch(sample_17, sf, nperseg=win)
+            freqs_18, psd_18 = signal.welch(sample_18, sf, nperseg=win)
+            freqs_19, psd_19 = signal.welch(sample_19, sf, nperseg=win)
+            idx_smr_9 = np.logical_and(freqs_9>= low, freqs_9<= high)
+            idx_smr_17 = np.logical_and(freqs_17>= low, freqs_17<= high)
+            idx_smr_18 = np.logical_and(freqs_18>= low, freqs_18<= high)
+            idx_smr_19 = np.logical_and(freqs_19>= low, freqs_19<= high)
+            # plt.figure(figsize=(7,4))
+            # plt.plot(freqs_9,psd_9)
+            # plt.fill_between(freqs_9, psd_9, where=idx_smr_9, color='skyblue')
+            # #plt.xlim([0,100])
+            # plt.ylim([0,psd_9.max()*1.1])
+            # g=plt.figure()
+            # [print(samp) for samp in sample_19]
+            # plt.plot(sample_19)
+            # plt.show()
+            # plt.show()
+            freq_res_9 = freqs_9[1]-freqs_9[0]
+            smr_power_9 = simpson(psd_9[idx_smr_9], dx=freq_res_9)
+            freq_res_17 = freqs_17[1]-freqs_17[0]
+            smr_power_17 = simpson(psd_17[idx_smr_17], dx=freq_res_17)
+            freq_res_18 = freqs_18[1]-freqs_18[0]
+            smr_power_18 = simpson(psd_18[idx_smr_18], dx=freq_res_18)
+            freq_res_19 = freqs_19[1]-freqs_19[0]
+            smr_power_19 = simpson(psd_19[idx_smr_19], dx=freq_res_19)
+            print(f'SMR power 9: {smr_power_9}\n')
+            print(f'SMR power 17: {smr_power_17}\n')
+            print(f'SMR power 18: {smr_power_18}\n')
+            print(f'SMR power 19: {smr_power_19}\n')
+
+            percentage_9 = ((smr_power_9 - min_9)/max_9)
+            percentage_17 = ((smr_power_17 - min_17)/max_17)
+            percentage_18 = ((smr_power_18 - min_18)/max_18)
+            percentage_19 = ((smr_power_19 - min_19)/max_19)
+            print(f'percentages: {percentage_9}, {percentage_17}, {percentage_18}, {percentage_19}')
+            combined = (percentage_17+percentage_18+percentage_19+percentage_9)/4
+            print(f'Combined scale: {combined}')
+
 
             sample_9 = np.empty((0))
             sample_17 = np.empty((0))
             sample_18 = np.empty((0))
             sample_19 = np.empty((0))
-            running = False
-
-
-            # Bereken FFT en vermogen
-            # fft_results_1 = fft(samples_1)
-            # fft_results_2 = fft(samples_2)
-            # fft_results_3 = fft(samples_3)
-            # power_spectrum = np.abs(fft_results[:len(selected_data) // 2]) ** 2  # Power spectrum
-
-            # # Neem het gemiddelde vermogen als indicatie voor feedback
-            # mean_power = np.mean(power_spectrum)
-            # feedback_value = scale_power_to_feedback(mean_power, baseline_power)
-            # print(f"Mean Power: {mean_power:.2f}, Feedback Value: {feedback_value:.2f}")
-
-            # # Helderheid aanpassen op basis van feedback
-            # target_brightness = feedback_value / 10.0
-            # print(f"Target brightness: {target_brightness:.2f}")
-
-            # last_adjust_time = seconds
-            # samples_1 = []
-
+            # running = False
+        pygame.time.wait(16)
+        if seconds - last_adjust_time >= 2:
+            last_adjust_time = seconds
+            
             # Helderheid aanpassen
+            if combined <= 5:
+                target_brightness = max(0.1, brightness - 0.1)
+            else:
+                target_brightness = min(1.0, brightness + 0.1)
+            print(f"Target brightness: {target_brightness}")
+
+        print(combined)
+        target_brightness = combined
         if brightness < target_brightness:
             brightness = min(target_brightness, brightness + adjust_speed)
         elif brightness > target_brightness:
             brightness = max(target_brightness, brightness - adjust_speed)
 
-            print(f"Target brightness: {target_brightness}")
+            # print(f"Target brightness: {target_brightness}")
 
         # Geleidelijke aanpassing van helderheid
         if brightness < target_brightness:
