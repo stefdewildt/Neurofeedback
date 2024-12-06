@@ -1,51 +1,46 @@
-import pygame
-import socket
-import struct
+import time
 import numpy as np
+from pylsl import StreamInfo, StreamOutlet
 
-# Pygame setup
-pygame.init()
-WIDTH, HEIGHT = 800, 600
-SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Neurofeedback")
-BG_COLOR = (0, 0, 0)
+# Parameters for the LSL stream
+n_channels = 25  # Number of EEG channels
+sampling_rate = 256  # Sampling rate in Hz
+chunk_size = 32  # Number of samples per chunk
+stream_name = "EventIDE_Signal_Stream"
+stream_type = "EEG"
 
-# Socket setup
-host = "192.168.137.1"  # Vervang met het IP-adres van de server-laptop
-port = 5000
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.connect((host, port))
+# Create LSL stream info and outlet
+info = StreamInfo(stream_name, stream_type, n_channels, sampling_rate, 'float32', 'simulated_eeg_25_channels')
+outlet = StreamOutlet(info)
 
-# Video simulatie of ander visueel feedback
-running = True
-brightness = 5
+# Generate synthetic EEG data
+def generate_eeg_data():
+    """Generates a chunk of synthetic EEG data with 25 channels."""
+    time = np.linspace(0, chunk_size / sampling_rate, chunk_size, endpoint=False)
+    
+    # Generate signals for different frequency bands
+    delta = np.sin(2 * np.pi * 3 * time)  # Delta band (3 Hz)
+    theta = np.sin(2 * np.pi * 6 * time)  # Theta band (6 Hz)
+    alpha = np.sin(2 * np.pi * 10 * time)  # Alpha band (10 Hz)
+    beta = np.sin(2 * np.pi * 20 * time)  # Beta band (20 Hz)
 
+    # Create a base pattern of EEG data for 4 bands
+    bands = np.array([delta, theta, alpha, beta]).T  # Shape: (chunk_size, 4)
+    
+    # Repeat and trim to match the number of channels
+    repeated_bands = np.tile(bands, (1, n_channels // 4 + 1))[:, :n_channels]
+    
+    # Add random noise to simulate variability
+    noise = np.random.normal(0, 0.1, (chunk_size, n_channels))
+    chunk = repeated_bands + noise
+    return chunk
+
+# Simulate streaming
+print(f"Starting simulated EEG stream with {n_channels} channels...")
 try:
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-        
-        # Ontvang data van server
-        data = client_socket.recv(4)  # Ontvang één float (4 bytes)
-        if not data:
-            break
-
-        # Decodeer ontvangen data
-        sample_value = struct.unpack('f', data)[0]
-        random_brightness = sample_value - 5
-
-        # Bereken helderheid
-        brightness += 0.01 * (random_brightness - brightness)
-        brightness = max(0, min(brightness, 10))
-
-        # Visualiseer helderheid met een kleurverandering
-        SCREEN.fill((int(25.5 * brightness), 0, 0))  # Simpel voorbeeld met rode kleur
-        pygame.display.update()
-        pygame.time.delay(16)
-
-except Exception as e:
-    print(f"Error: {e}")
-finally:
-    client_socket.close()
-    pygame.quit()
+    while True:
+        chunk = generate_eeg_data()  # Generate a chunk of EEG data
+        outlet.push_chunk(chunk.tolist())  # Push the chunk to the LSL stream
+        time.sleep(chunk_size / sampling_rate)  # Sleep to simulate real-time streaming
+except KeyboardInterrupt:
+    print("\nSimulation stopped.")
