@@ -1,15 +1,12 @@
 import pygame
 from pyvidplayer2 import Video, VideoPlayer
 import numpy as np
-import random
-from pylsl import StreamInlet, resolve_stream, StreamInfo, StreamOutlet
-from scipy.fft import fft
-from scipy import signal
-import traceback
-import matplotlib.pyplot as plt
+from pylsl import StreamInlet, resolve_stream
 from scipy.signal import welch
 from scipy.integrate import simpson
 import threading
+import time
+import traceback
 
 # pygame initialiseren
 pygame.init()
@@ -51,8 +48,8 @@ def scale_power_to_feedback(power, baseline, scale_min=1, scale_max=10):
     scaled_value = 5 + (power - baseline) * (scale_max - scale_min) / (baseline * 2)
     return max(scale_min, min(scale_max, scaled_value))
 
-#variables for bladiebla
-low,high = 12,15
+# Variables voor EEG-verwerking
+low, high = 12, 15
 sf = 256
 win = sf * 2
 
@@ -61,102 +58,87 @@ sample_17 = np.empty((0))
 sample_18 = np.empty((0))
 sample_19 = np.empty((0))
 
-min_9, max_9 = 2.74, 8.3
-min_17, max_17 = 0.67, 1.08
-min_18, max_18 = 0.75, 1.16
-min_19, max_19 = 0.98, 1.46
+min_9, max_9 = 2.98, 10
+min_17, max_17 = 3.99, 10
+min_18, max_18 = 3.83, 11
+min_19, max_19 = 3.99, 14
 
+def data_acquisition_thread():
+    global sample_9, sample_17, sample_18, sample_19, running
+    while running:
+        sample, timestamp = inlet.pull_chunk()
+        if len(sample) == 0:
+            continue
+        sample = np.array(sample)
+        sample_9 = np.append(sample_9, sample[:, 8])
+        sample_17 = np.append(sample_17, sample[:, 16])
+        sample_18 = np.append(sample_18, sample[:, 17])
+        sample_19 = np.append(sample_19, sample[:, 18])
+        time.sleep(1 / sf)  # Zorg ervoor dat de thread de data-acquisitie synchroniseert
+
+# Start een aparte thread voor het verzamelen van EEG-data
+data_thread = threading.Thread(target=data_acquisition_thread)
+data_thread.start()
 
 try:
-
     while running:
-        clock.tick(60)
+        clock.tick(60)  # Houd de framerate op 60 FPS
         seconds = int((pygame.time.get_ticks() - start_ticks) / 1000)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-        sample, timestamp = inlet.pull_chunk()
-        if len(sample)==0:
-            continue
-        sample=np.array(sample)
-        # print(sample.shape)
+        # Verwerk EEG-gegevens elke 2 seconden
+        if len(sample_19) >= 2 * sf:
+            # Filter de frequenties met een bandpass
+            freqs_9, psd_9 = welch(sample_9, sf, nperseg=win)
+            freqs_17, psd_17 = welch(sample_17, sf, nperseg=win)
+            freqs_18, psd_18 = welch(sample_18, sf, nperseg=win)
+            freqs_19, psd_19 = welch(sample_19, sf, nperseg=win)
 
-        sample_9=np.append(sample_9, sample[:,8])
-        sample_17=np.append(sample_17, sample[:,16])
-        sample_18=np.append(sample_18, sample[:,17])
-        sample_19=np.append(sample_19, sample[:,18])
+            idx_smr_9 = np.logical_and(freqs_9 >= low, freqs_9 <= high)
+            idx_smr_17 = np.logical_and(freqs_17 >= low, freqs_17 <= high)
+            idx_smr_18 = np.logical_and(freqs_18 >= low, freqs_18 <= high)
+            idx_smr_19 = np.logical_and(freqs_19 >= low, freqs_19 <= high)
 
+            # Bereken de SMR-power voor elke frequentie
+            smr_power_9 = simpson(psd_9[idx_smr_9], dx=freqs_9[1] - freqs_9[0])
+            smr_power_17 = simpson(psd_17[idx_smr_17], dx=freqs_17[1] - freqs_17[0])
+            smr_power_18 = simpson(psd_18[idx_smr_18], dx=freqs_18[1] - freqs_18[0])
+            smr_power_19 = simpson(psd_19[idx_smr_19], dx=freqs_19[1] - freqs_19[0])
+            combined_smr = (smr_power_9+smr_power_19+smr_power_18+smr_power_17)/4
+            # running = False
 
-
-        # Nieuwe doelwaarden instellen op een interval van 2 seconden
-        #if secondmarker>=2:
-        if len(sample_19)>=2*sf:
-            # filter (band pass toevoegen), wss 1 tot 30, we willen 50 hz eruit hebben(lichtnet)
-            freqs_9, psd_9 = signal.welch(sample_9, sf, nperseg=win)
-            freqs_17, psd_17 = signal.welch(sample_17, sf, nperseg=win)
-            freqs_18, psd_18 = signal.welch(sample_18, sf, nperseg=win)
-            freqs_19, psd_19 = signal.welch(sample_19, sf, nperseg=win)
-            idx_smr_9 = np.logical_and(freqs_9>= low, freqs_9<= high)
-            idx_smr_17 = np.logical_and(freqs_17>= low, freqs_17<= high)
-            idx_smr_18 = np.logical_and(freqs_18>= low, freqs_18<= high)
-            idx_smr_19 = np.logical_and(freqs_19>= low, freqs_19<= high)
-            # plt.figure(figsize=(7,4))
-            # plt.plot(freqs_9,psd_9)
-            # plt.fill_between(freqs_9, psd_9, where=idx_smr_9, color='skyblue')
-            # #plt.xlim([0,100])
-            # plt.ylim([0,psd_9.max()*1.1])
-            # g=plt.figure()
-            # [print(samp) for samp in sample_19]
-            # plt.plot(sample_19)
-            # plt.show()
-            # plt.show()
-            freq_res_9 = freqs_9[1]-freqs_9[0]
-            smr_power_9 = simpson(psd_9[idx_smr_9], dx=freq_res_9)
-            freq_res_17 = freqs_17[1]-freqs_17[0]
-            smr_power_17 = simpson(psd_17[idx_smr_17], dx=freq_res_17)
-            freq_res_18 = freqs_18[1]-freqs_18[0]
-            smr_power_18 = simpson(psd_18[idx_smr_18], dx=freq_res_18)
-            freq_res_19 = freqs_19[1]-freqs_19[0]
-            smr_power_19 = simpson(psd_19[idx_smr_19], dx=freq_res_19)
             print(f'SMR power 9: {smr_power_9}\n')
             print(f'SMR power 17: {smr_power_17}\n')
             print(f'SMR power 18: {smr_power_18}\n')
             print(f'SMR power 19: {smr_power_19}\n')
-            # running = False
+            print(f'Combined SMR Power: {combined_smr}')
 
-            percentage_9 = ((smr_power_9 - min_9)/max_9)
-            percentage_17 = ((smr_power_17 - min_17)/max_17)
-            percentage_18 = ((smr_power_18 - min_18)/max_18)
-            percentage_19 = ((smr_power_19 - min_19)/max_19)
-            print(f'percentages: {percentage_9}, {percentage_17}, {percentage_18}, {percentage_19}')
-            combined = (percentage_17+percentage_18+percentage_19+percentage_9)/4
+            percentage_9 = ((smr_power_9 - min_9) / max_9)
+            percentage_17 = ((smr_power_17 - min_17) / max_17)
+            percentage_18 = ((smr_power_18 - min_18) / max_18)
+            percentage_19 = ((smr_power_19 - min_19) / max_19)
+
+            combined = (percentage_17 + percentage_18 + percentage_19 + percentage_9) / 4
             print(f'Combined scale: {combined}')
 
-
+            # Reset de samples voor de volgende iteratie
             sample_9 = np.empty((0))
             sample_17 = np.empty((0))
             sample_18 = np.empty((0))
             sample_19 = np.empty((0))
-            
-        pygame.time.wait(16)
+
+        # Update helderheid elke 2 seconden
         if seconds - last_adjust_time >= 2:
             last_adjust_time = seconds
-            
+
             # Helderheid aanpassen
             if combined <= 0.5:
-                target_brightness = max(0.1, brightness - 0.1)
+                target_brightness = max(0.3, brightness - 0.1)
             else:
                 target_brightness = min(1.0, brightness + 0.1)
-            print(f"Target brightness: {target_brightness}")
-
-        if brightness < target_brightness:
-            brightness = min(target_brightness, brightness + adjust_speed)
-        elif brightness > target_brightness:
-            brightness = max(target_brightness, brightness - adjust_speed)
-
-            # print(f"Target brightness: {target_brightness}")
 
         # Geleidelijke aanpassing van helderheid
         if brightness < target_brightness:
@@ -176,31 +158,32 @@ try:
                 beep_sound.stop()  # Stop de pieptoon
                 video.set_volume(video_volume)  # Herstel het videovolume
 
+        # Vul het scherm met de achtergrondkleur
         SCREEN.fill(BG_COLOR)
 
-        # Draw the video frame onto a temporary surface
+        # Teken het videobeeld op een tijdelijke surface
         temp_surface = pygame.Surface((WIDTH, HEIGHT))
 
         vid.update()
         vid.draw(temp_surface)
 
-        # Access the pixel data of the temp_surface
+        # Verkrijg de pixeldata van de tijdelijke surface
         frame_array = pygame.surfarray.pixels3d(temp_surface)
 
-        # Apply brightness adjustment
+        # Pas de helderheid aan
         adjusted_frame = np.clip(frame_array * brightness, 0, 255).astype('uint8')
 
-        # Convert the adjusted frame back to a Pygame surface
+        # Zet het aangepaste frame om naar een Pygame surface
         adjusted_surface = pygame.surfarray.make_surface(adjusted_frame)
 
-        # Blit the adjusted surface onto the screen
+        # Blit de aangepaste surface naar het scherm
         SCREEN.blit(adjusted_surface, (0, 0))
 
         pygame.display.update()
 
 except Exception as e:
     print(traceback.format_exc())
-    print(f"Error: {e}");
+    print(f"Error: {e}")
 
 vid.close()
 pygame.quit()
