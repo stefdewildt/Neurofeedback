@@ -15,17 +15,17 @@ pygame.mixer.init()  # Voor geluid
 clock = pygame.time.Clock()
 start_ticks = pygame.time.get_ticks()
 
-WIDTH, HEIGHT = 800, 600
+WIDTH, HEIGHT = 1900, 1000
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Neurofeedback")
 
 BG_COLOR = (0, 0, 0)
-video = Video("ted-ed.mp4")
+video = Video("ted-ed_3.mp4")
 vid = VideoPlayer(video, (0, 0, WIDTH, HEIGHT))
 
 # Geluid
 beep_sound = pygame.mixer.Sound("beep.mp3")  # Zorg dat je een "beep.wav"-bestand hebt
-beep_sound.set_volume(0.5)  # Standaard volume van de pieptoon
+beep_sound.set_volume(0.25)  # Standaard volume van de pieptoon
 video_volume = 1.0  # Beginvolume van de video
 brightness = 1.0
 target_brightness = 1.0
@@ -58,10 +58,10 @@ sample_17 = np.empty((0))
 sample_18 = np.empty((0))
 sample_19 = np.empty((0))
 
-min_9, max_9 = 2.98, 10
-min_17, max_17 = 3.99, 10
-min_18, max_18 = 3.83, 11
-min_19, max_19 = 3.99, 14
+min_9, max_9 = 4.97, 11.4
+min_17, max_17 = 6.47, 10.31
+min_18, max_18 = 4.97, 7.60
+min_19, max_19 = 4.56, 8.05
 
 def data_acquisition_thread():
     global sample_9, sample_17, sample_18, sample_19, running
@@ -90,7 +90,7 @@ try:
                 running = False
 
         # Verwerk EEG-gegevens elke 2 seconden
-        if len(sample_19) >= 2 * sf:
+        if len(sample_19) >= 60 * sf:
             # Filter de frequenties met een bandpass
             freqs_9, psd_9 = welch(sample_9, sf, nperseg=win)
             freqs_17, psd_17 = welch(sample_17, sf, nperseg=win)
@@ -108,7 +108,7 @@ try:
             smr_power_18 = simpson(psd_18[idx_smr_18], dx=freqs_18[1] - freqs_18[0])
             smr_power_19 = simpson(psd_19[idx_smr_19], dx=freqs_19[1] - freqs_19[0])
             combined_smr = (smr_power_9+smr_power_19+smr_power_18+smr_power_17)/4
-            # running = False
+            running = False
 
             print(f'SMR power 9: {smr_power_9}\n')
             print(f'SMR power 17: {smr_power_17}\n')
@@ -147,7 +147,7 @@ try:
             brightness = max(target_brightness, brightness - adjust_speed)
 
         # Geluidsbeheer afhankelijk van helderheid
-        if brightness < 0.3:
+        if brightness < 0.5:
             if not is_beeping:
                 is_beeping = True
                 beep_sound.play(-1)  # Pieptoon in een lus afspelen
